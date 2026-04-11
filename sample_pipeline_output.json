@@ -1,0 +1,57 @@
+{
+  "complaint_id": "507ef572-dcd8-458f-9fc7-57b580f0a471",
+  "processed_at": "2026-04-12T04:34:06.278129",
+  "classification": {
+    "text_analysis": {
+      "sentiment": "urgent",
+      "issue_type": "fallen branch on electrical wires",
+      "language": "english",
+      "location_hint": "Wardha road",
+      "text_severity": 2
+    },
+    "image_analysis": {
+      "visual_description": "",
+      "detected_issue": "",
+      "image_severity": 0
+    },
+    "final_result": {
+      "category": "fallen tree/branch",
+      "severity": 2,
+      "severity_label": "critical",
+      "department": "Electrical Department",
+      "needs_immediate_action": true,
+      "summary": "Large branch fell on main electrical wire on Wardha road.",
+      "confidence": 0.95,
+      "routing_reason": "Fallen branch on electrical wire poses immediate safety risk and power hazard."
+    }
+  },
+  "grouping": {
+    "group_id": "507ef572-dcd8-458f-9fc7-57b580f0a471",
+    "is_duplicate": false
+  },
+  "priority": {
+    "priority_score": 98,
+    "priority_label": "CRITICAL",
+    "recommended_sla_hours": 4,
+    "score_breakdown": {
+      "base_severity_score": 60,
+      "frequency_score": 0,
+      "vulnerability_score": 18,
+      "time_decay_bonus": 10,
+      "immediate_action_bonus": 10
+    }
+  },
+  "routing": {
+    "complaint_id": "507ef572-dcd8-458f-9fc7-57b580f0a471",
+    "department": "Electrical Department",
+    "contact_info": {
+      "dept_name": "Electrical Department",
+      "dept_email": "electrical@nmcnagpur.gov.in",
+      "dept_phone": "0712-2567012",
+      "officer_name": "S. V. Patil (Superintending Engineer) - Ward 6"
+    },
+    "estimated_resolution": "2026-04-12T08:34:06.278129",
+    "status": "routed",
+    "routing_reason": "Fallen branch on electrical wire poses immediate safety risk and power hazard."
+  }
+}
