@@ -107,30 +107,58 @@ def load_model() -> genai.GenerativeModel:
 logger.info("Initializing CitySync Model...")
 model = load_model()
 
-def _get_fallback_result(reason: str) -> Dict[str, Any]:
-    logger.error(f"Classification failed, returning fallback. Reason: {reason}")
+def _get_fallback_result(reason: str, text: str) -> Dict[str, Any]:
+    logger.error(f"Classification failed with Cloud API limitation. Initializing Local Regex Fallback. Reason: {reason}")
+    text_lower = text.lower()
+    
+    category = "general issue"
+    department = "General Grievance Cell"
+    sentiment = "reporting"
+    severity = 1
+    
+    # Primitive rule-engine for Local Fallback
+    if "pothole" in text_lower or "road" in text_lower:
+        category = "pothole/road damage"
+        department = "PWD - Public Works Department"
+        severity = 2 if "dangerous" in text_lower or "huge" in text_lower else 1
+    elif "water" in text_lower or "pipeline" in text_lower:
+        category = "water supply"
+        department = "NMC Water Supply Department"
+        severity = 2 if "no water" in text_lower else 1
+    elif "garbage" in text_lower or "waste" in text_lower or "bin" in text_lower:
+        category = "waste accumulation"
+        department = "Solid Waste Management"
+    elif "wire" in text_lower or "electricity" in text_lower or "light" in text_lower:
+        category = "electrical hazard"
+        department = "Electrical Department"
+        severity = 2
+    elif "drain" in text_lower or "sewage" in text_lower:
+        category = "drainage issue"
+        department = "Drainage Department"
+        severity = 2
+        
     return {
         "text_analysis": {
-            "sentiment": "neutral",
-            "issue_type": "unknown",
-            "language": "mixed",
-            "location_hint": "",
-            "text_severity": 0
+            "sentiment": "urgent" if severity == 2 else "neutral",
+            "issue_type": category,
+            "language": "english",
+            "location_hint": "Unknown",
+            "text_severity": severity
         },
         "image_analysis": {
-            "visual_description": "",
+            "visual_description": "API fallback invoked, image parsing suspended",
             "detected_issue": "",
             "image_severity": 0
         },
         "final_result": {
-            "category": "other",
-            "severity": 0,
-            "severity_label": "low",
-            "department": "General Grievance Cell",
-            "needs_immediate_action": False,
-            "summary": "Complaint classification failed",
-            "confidence": 0.0,
-            "routing_reason": f"Fallback triggered: {reason}"
+            "category": category,
+            "severity": severity,
+            "severity_label": "critical" if severity == 2 else ("low" if severity == 0 else "medium"),
+            "department": department,
+            "needs_immediate_action": bool(severity == 2),
+            "summary": " ".join(text.split()[:10]) + "...", # Truncate first 10 words as summary
+            "confidence": 0.65,
+            "routing_reason": f"System Fallback Matched keywords for '{category}' automatically due to Cloud API Lockout."
         }
     }
 
@@ -184,7 +212,7 @@ def classify_complaint(text: str, image_path: Optional[str] = None) -> Dict[str,
                 logger.warning(f"API call failed: {e}. Retrying after 3 seconds...")
                 time.sleep(3)
             else:
-                return _get_fallback_result(str(e))
+                return _get_fallback_result(str(e), text)
 
 
 if __name__ == "__main__":

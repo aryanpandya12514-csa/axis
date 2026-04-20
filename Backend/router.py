@@ -2,12 +2,6 @@ import logging
 from typing import Dict, Any
 from datetime import datetime, timedelta
 
-try:
-    import psycopg2
-    from psycopg2.extensions import connection as PgConnection
-except ImportError:
-    PgConnection = Any
-
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -73,7 +67,6 @@ DEPARTMENTS = {
 def get_department_contact(department_name: str, ward_id: int) -> Dict[str, str]:
     """
     Returns contact info and the designated officer for a given department and ward.
-    Uses fallback 'default' mapping if a specific ward officer isn't mapped.
     """
     dept_info = DEPARTMENTS.get(department_name, DEPARTMENTS["General Grievance Cell"])
     
@@ -95,65 +88,20 @@ def route_complaint(
     complaint_id: str, 
     classifier_output: Dict[str, Any], 
     priority_score_result: Dict[str, Any], 
-    ward_id: int,
-    db_conn: PgConnection
+    ward_id: int
 ) -> Dict[str, Any]:
     """
-    Updates the Postgres database to assign the complaint to the correct department
-    and calculates the estimated resolution time based on priority score SLAs.
-    Inserts an event into the complaint timeline.
-
-    Args:
-        complaint_id (str): UUID or string ID of the database row.
-        classifier_output (dict): The result output directly from CitySync NLP classifier.
-        priority_score_result (dict): The result from priority_scorer.py.
-        ward_id (int): Dynamic ward parameter parsed from caller script.
-        db_conn: The active psycopg2 database connection.
-
-    Returns:
-        dict: Routing confirmation and dispatch details.
+    Computes department endpoints, calculating SLA ETA purely in-memory.
+    Returns structurally complete JSON payload that Flask will push to MongoDB natively.
     """
     final_result = classifier_output.get("final_result", {})
     department = final_result.get("department", "General Grievance Cell")
-    severity = final_result.get("severity", 0)
     
-    # Adopt unified hours-based SLA injected by the priority_scorer module
     now = datetime.now()
     eta_hours = priority_score_result.get("recommended_sla_hours", 336)
-    priority_label = priority_score_result.get("priority_label", "LOW")
     estimated_resolution = now + timedelta(hours=eta_hours)
     
     contact_info = get_department_contact(department, ward_id)
-    
-    try:
-        with db_conn.cursor() as cursor:
-            # 1. Update the main complaint row
-            update_sql = """
-                UPDATE complaints
-                SET dept_name = %s,
-                    status = 'routed',
-                    routed_at = %s,
-                    estimated_resolution = %s
-                WHERE id = %s
-            """
-            cursor.execute(update_sql, (department, now, estimated_resolution, complaint_id))
-            
-            # 2. Insert into the timeline table for auditing and tracking
-            timeline_sql = """
-                INSERT INTO complaint_timeline (complaint_id, event_type, description, created_at)
-                VALUES (%s, %s, %s, %s)
-            """
-            event_desc = f"Complaint automatically routed to {department} (Severity: {priority_label}). ETA: {eta_hours} hours."
-            cursor.execute(timeline_sql, (complaint_id, "SYSTEM_ROUTED", event_desc, now))
-            
-        db_conn.commit()
-        logger.info(f"Successfully routed complaint {complaint_id} to {department}")
-        
-    except Exception as e:
-        db_conn.rollback()
-        logger.error(f"Database error during routing: {e}")
-        return {"error": str(e), "status": "failed"}
-
     dispatch_message = final_result.get("routing_reason", "No reason provided")
 
     return {
@@ -182,51 +130,3 @@ def send_dept_notification(routing_result: dict) -> bool:
     logger.info(f"--------------------------------\n")
     
     return True
-
-
-if __name__ == "__main__":
-    print("====== Running Router Tests ======\n")
-    
-    class MockCursor:
-        def execute(self, sql, params=None):
-            logger.debug(f"Mock executed SQL. Params: {params}")
-        def __enter__(self): return self
-        def __exit__(self, *args): pass
-
-    class MockConnection:
-        def cursor(self): return MockCursor()
-        def commit(self): logger.debug("Mock commit")
-        def rollback(self): logger.debug("Mock rollback")
-        
-    mock_db = MockConnection()
-    
-    mock_classifier_output = {
-        "final_result": {
-            "department": "PWD - Public Works Department",
-            "severity": 1,
-            "routing_reason": "Potholes fall under the jurisdiction of the Public Works Department."
-        }
-    }
-    
-    mock_priority_score_result = {
-        "recommended_sla_hours": 72,
-        "priority_label": "MEDIUM"
-    }
-    
-    test_cmp_id = "test-uuid-1234"
-    print(f"Routing simulated complaint: {test_cmp_id}...")
-    
-    route_data = route_complaint(
-        complaint_id=test_cmp_id, 
-        classifier_output=mock_classifier_output, 
-        priority_score_result=mock_priority_score_result,
-        ward_id=15,
-        db_conn=mock_db
-    )
-    
-    print("\n[Return Data]")
-    import json
-    print(json.dumps(route_data, indent=2))
-    
-    print("\n[Notification]")
-    send_dept_notification(route_data)
